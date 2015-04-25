@@ -1,0 +1,209 @@
+---
+output: html_document
+---
+# Practical Machine Learning Course Project 
+
+###The goal is to predict the manner in which exercise is done. 
+
+## Synopsis
+Using devices as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a 
+large amount of data about personal activity relatively inexpensively. These type of devices
+are part of the quantified self movement - a group of enthusiasts who take measurements about
+themselves regularly to improve their health, to find patterns in their behavior, or because 
+they are tech geeks. One thing that people regularly do is quantify how much of a particular 
+activity they do, but they rarely quantify how well they do it. In this project,goal is to use data
+from accelerometers on the belt, forearm, arm, and dumbell of 6 participants.
+They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+This is the "classe" variable in the training set. 
+
+##Objectives
+1.Create a report describing how you built your model? 
+2.How you used cross validation?
+3.What you think the expected out of sample error is?
+4.Why you made the choices you did. 
+5.Use your prediction model to predict 20 different test cases. 
+
+##Data Sources
+The training data for this project is taken from below link:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data is taken from below link:
+  
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+```{r,echo=TRUE,warning=FALSE}
+## Load required packages
+library(AppliedPredictiveModeling)
+library(caret)
+library(rattle)
+library(rpart.plot)
+library(randomForest)
+```
+## Load and Clean Data
+
+```{r,echo=TRUE}
+##Data is downloaded and saved in current working directory. Below commands load data in R.
+df_training<-read.csv("pml-training.csv", na.strings=c("NA",""))
+colnames_train<-colnames(df_training)
+df_testing<-read.csv("pml-testing.csv", na.strings=c("NA",""))
+colnames_test<-colnames(df_testing)
+```
+```{r,echo=TRUE}
+## Preliminary test is perrformed to check if column names are same in test and training data
+all.equal(colnames_train[1:length(colnames_train)-1],colnames_test[1:length(colnames_train)-1])
+```
+```{r,echo=TRUE}
+##Remove NAs data cleaning
+df_training_nonNA <-df_training[,which(as.numeric(colSums(is.na(df_training)))==0)]
+df_testing_nonNA <-df_testing[,which(as.numeric(colSums(is.na(df_testing)))==0)]
+
+## Remove Non-numeric Variables
+df_training_nonNA <- df_training_nonNA[,-(1:7)]
+df_testing_nonNA <- df_testing_nonNA[,-(1:7)]
+```
+```{r,echo=TRUE}
+## Check variablility of covariates
+nsv <-nearZeroVar(df_training_nonNA, saveMetrics=TRUE)
+```
+Non zero variance variables are FALSE, so there is no need to eliminate any covariates due to lack of variability
+
+## Data Partitioning
+We were provided with a large training set (19,622 entries) and a small testing set (20 entries). Instead of performing the algorithm on the entire training set, as it would be time consuming and wouldn't allow for an attempt on a testing set, I chose to divide the given training set into four roughly equal sets, each of which was then split into a training set (comprising 60% of the entries) and a testing set (comprising 40% of the entries).
+
+```{r,echo=TRUE}
+set.seed(888)
+subData <- createDataPartition(y=df_training_nonNA$classe,p=0.25,list=FALSE)
+subData1<-df_training_nonNA[subData,]
+subTest <- df_training_nonNA[-subData,]
+set.seed(888)
+subData <-createDataPartition(y=df_remainder$classe, p= 0.33,list=FALSE)
+subData2 <- df_remainder[subData,]
+subTest <-df_remainder[-subData,]
+set.seed(888)
+subData <- createDataPartition(y=df_remainder$classe,p=0.5,list=FALSE)
+subData3 <- df_remainder[subData,]
+subData4<- df_remainder[-subData,]
+set.seed(888)
+subTrain <- createDataPartition(y=df_small1$classe, p=0.6, list=FALSE)
+subData_training1 <-subData1[subTrain,]
+subData_testing1<- subData1[-subTrain,]
+set.seed(888)
+subTrain <- createDataPartition(y=df_small2$classe, p=0.6, list=FALSE)
+subData_training2 <-subData2[subTrain,]
+subData_testing2 <-subData2[-subTrain,]
+set.seed(888)
+subTrain <- createDataPartition(y=df_small3$classe, p=0.6, list=FALSE)
+subData_testing3 <-subData3[subTrain,]
+subData_training3 <-subData3[-subTrain,]
+set.seed(888)
+subTrain <- createDataPartition(y=df_small3$classe, p=0.6, list=FALSE)
+subData_testing4 <-subData4[subTrain,]
+subData_training4 <-subData4[-subTrain,]
+```
+## Trial 1 Decision Tree Model Fitting
+```{r,echo=TRUE}
+set.seed(888)
+modFit <- train(subData_training1$classe ~.,data=subData_training1,method="rpart")
+print(modFit)
+print(modFit$finalModel,digits=3)
+fancyRpartPlot(modFit$finalModel)
+# Run against testing set 1
+predictions<-predict(modFit, newdata=subData_testing1)
+print(confusionMatrix(predictions, subData_testing1$classe),digits=4)
+```
+Accuracy rate is very low as .564 and needs improvement.
+```{r,echo=TRUE}
+# 1a. Train Decision Tree Model with preprocessing.
+set.seed(888)
+modFit <- train(subData_training1$classe ~ ., preProcess= c("center","scale"), data=subData_training1,method="rpart")
+print(modFit,digits=3)
+
+# 1b. Train Decision Tree Modelwith cross validation.
+modFit <- train(subData_training1$classe ~ ., trControl= trainControl(method= "cv",number=4), data=subData_training1,method="rpart")
+
+print(modFit,digits=3)
+
+# 1c. Train Decision Tree Modelwith both preprocessing and cross validation.
+set.seed(888)
+modFit <- train(subData_training1$classe ~.,preProcess=c("center","scale"),trControl=trainControl(method="cv",number=4),data=subData_training1,method="rpart")
+print(modFit, digits=3)
+# Run against testing set 1 of 4 with both preprocessing and cross validation.
+predictions<- predict(modFit,newdata=subData_testing1)
+print(confusionMatrix(predictions,subData_testing1$classe),digits=4)
+```
+
+## 2 Random forest Model Fitting
+```{r,echo=TRUE}
+## 2a Train on training set 1 of 4 with only cross validation.
+modFit<-train(subData_training1$classe ~.,method="rf",trControl=trainControl(method="cv",number=4),data=subData_training1)
+print(modFit, digits=3)
+## Run against testing set 1 of 4
+predictions <- predict(modFit, newdata=subData_testing1)
+print(confusionMatrix(predictions,subData_testing1$classe),digits=4)
+print(predict(modFit, newdata=df_testing_nonNA))
+
+# 2b Train Random forest Model with both preprocessing and cross validation.
+set.seed(888)
+modFit <- train(subData_training1$classe ~., method="rf",preProcess=c("center","scale"),trControl=trainControl(method="cv",number=4),data=subData_training1)
+print(modFit,digits=3)
+
+# Run against testing set 1 of 4.
+predictions <- predict(modFit, newdata=subData_testing1)
+print(confusionMatrix(predictions, subData_testing1$classe), digits=4)
+# Run against 20 testing set provided by Professor Leek.
+print(predict(modFit, newdata=df_testing))
+
+# 2c Train Random forest Model with preprocessing and cross validation training data2.
+set.seed(888)
+modFit <- train(subData_training2$classe ~ ., method="rf", preProcess=c("center", "scale"), trControl=trainControl(method = "cv", number = 4), data=subData_training2)
+print(modFit, digits=3)
+
+# Run against testing set 2 of 4.
+predictions <- predict(modFit, newdata=subData_testing2)
+print(confusionMatrix(predictions, subData_testing2$classe), digits=4)
+
+# Run against 20 testing set provided by Professor Leek.
+print(predict(modFit, newdata=df_testing))
+
+# 2d Train on training set 3 of 4 with preprocessing and cross validation.
+set.seed(888)
+modFit <- train(subData_training3$classe ~ ., method="rf", preProcess=c("center", "scale"), trControl=trainControl(method = "cv", number = 4), data=subData_training3)
+print(modFit, digits=3)
+
+# Run against testing set 3 of 4.
+predictions <- predict(modFit, newdata=subData_testing3)
+print(confusionMatrix(predictions, subData_testing3$classe), digits=4)
+
+# Run against 20 testing set provided by Professor Leek.
+print(predict(modFit, newdata=df_testing))
+
+```
+
+There is significant difference in Accuracy using Decison Tree Modeling and Random Forest.
+Using Random Forest  model and cross Validation Accuracy approaches 1.
+```{r,echo=TRUE}
+# Run against 20 testing set provided by Professor Leek.
+print(predict(modFit, newdata=df_testing))
+predictfinal <- predict(modFit, df_testing)
+```
+## Out Of Sample Error
+Random Forest (preprocessing and cross validation) Testing Set 1: 1 - .9612 = 0.0388
+Random Forest (preprocessing and cross validation) Testing Set 2: 1 - .9539 = 0.0461
+Random Forest (preprocessing and cross validation) Testing Set 3: 1 - .9328 = 0.0672
+
+Average Out Of Sample Error: 0.0169
+
+## Function for Course Project submission
+```{r,echo=TRUE}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(predictfinal)
+
+```
